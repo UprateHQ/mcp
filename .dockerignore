@@ -1,0 +1,11 @@
+node_modules
+src
+*.ts
+.git
+.github
+docs
+*.md
+tsconfig.json
+.claude
+.agents
+.mcp.json
