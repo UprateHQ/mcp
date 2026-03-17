@@ -1,0 +1,11 @@
+node_modules/
+dist/
+
+# Claude Code
+.agents/
+.claude/
+skills-lock.json
+
+# Local dev
+docker-compose.yml
+.env
