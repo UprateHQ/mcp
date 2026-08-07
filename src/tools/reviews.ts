@@ -2,7 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiClient, handleToolError, jsonToolResult } from "../api.js";
 
-const listReviewsInput = z.object({
+// Must stay a plain raw shape: the MCP SDK only serializes a ZodRawShape into
+// the published JSON schema, so a wrapping .refine() would erase every property
+// from tools/list. Cross-field checks live in the handler instead.
+const listReviewsInput = {
   app_uuid: z.string().uuid().describe("The app UUID to scope reviews to"),
   platforms: z.array(z.enum(["app_store", "play_store"])).optional(),
   sentiments: z.array(z.enum(["positive", "neutral", "negative"])).optional(),
@@ -20,13 +23,26 @@ const listReviewsInput = z.object({
   sort: z.enum(["newest", "oldest", "highest", "lowest"]).optional(),
   page: z.number().int().min(1).optional(),
   per_page: z.number().int().min(1).max(100).optional(),
-}).refine(
-  ({ date_from, date_to }) => !date_from || !date_to || date_from <= date_to,
-  { message: "date_from must be on or before date_to", path: ["date_to"] }
-).refine(
-  ({ rating_min, rating_max }) => rating_min === undefined || rating_max === undefined || rating_min <= rating_max,
-  { message: "rating_min must be less than or equal to rating_max", path: ["rating_max"] }
-);
+};
+
+function listReviewsCrossFieldError(input: {
+  date_from?: string;
+  date_to?: string;
+  rating_min?: number;
+  rating_max?: number;
+}): string | null {
+  if (input.date_from && input.date_to && input.date_from > input.date_to) {
+    return "date_from must be on or before date_to.";
+  }
+  if (
+    input.rating_min !== undefined &&
+    input.rating_max !== undefined &&
+    input.rating_min > input.rating_max
+  ) {
+    return "rating_min must be less than or equal to rating_max.";
+  }
+  return null;
+}
 
 export function registerReviewTools(server: McpServer, api: ApiClient): void {
   server.registerTool("list_reviews", {
@@ -35,6 +51,10 @@ export function registerReviewTools(server: McpServer, api: ApiClient): void {
     inputSchema: listReviewsInput,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ app_uuid, platforms, sentiments, rating_min, rating_max, status, territories, date_from, date_to, topic_uuid, search, sort, page, per_page }) => {
+    const crossFieldError = listReviewsCrossFieldError({ date_from, date_to, rating_min, rating_max });
+    if (crossFieldError) {
+      return { content: [{ type: "text" as const, text: crossFieldError }], isError: true as const };
+    }
     try {
       return jsonToolResult(await api.get("/reviews", {
         appUuid: app_uuid,

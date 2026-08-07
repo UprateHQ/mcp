@@ -40,6 +40,15 @@ test("shared server factory exposes exactly 23 annotated tools", async () => {
     assert.equal(byName.get_review_soul.annotations?.readOnlyHint, true);
     assert.equal(byName.update_review_soul.annotations?.destructiveHint, true);
     assert.equal(byName.reply_to_review.annotations?.destructiveHint, true);
+
+    // Regression: a ZodEffects inputSchema serializes to an empty JSON schema,
+    // silently hiding every parameter from clients. Assert the published
+    // schemas keep their properties.
+    const listReviewsProps = Object.keys(byName.list_reviews.inputSchema.properties ?? {});
+    for (const prop of ["app_uuid", "platforms", "rating_min", "date_from", "date_to"]) {
+      assert.ok(listReviewsProps.includes(prop), `list_reviews schema missing ${prop}`);
+    }
+    assert.ok(byName.create_automation_rule.inputSchema.properties?.condition, "create_automation_rule schema missing condition");
   } finally {
     await first.client.close(); await second.client.close();
   }
