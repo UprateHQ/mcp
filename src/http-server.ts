@@ -1,49 +1,28 @@
-// src/http-server.ts
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createServer, IncomingMessage, Server, ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { ApiClient } from "./api.js";
-import { registerAppTools } from "./tools/apps.js";
-import { registerReviewTools } from "./tools/reviews.js";
-import { registerTopicTools } from "./tools/topics.js";
-import { registerAnalyticsTools } from "./tools/analytics.js";
-import { registerWorkflowTools } from "./tools/workflows.js";
 import {
-  OAuthConfig,
-  handleMetadata,
-  handleAuthorize,
-  handleCallback,
-  handleRegistration,
-  handleTokenExchange,
+  handleAuthorize, handleCallback, handleMetadata, handleProtectedResourceMetadata,
+  handleRegistration, handleTokenExchange, normalizeOAuthConfig, OAuthConfig,
 } from "./oauth-proxy.js";
+import { createUprateServer } from "./server.js";
 
 interface Session {
-  server: McpServer;
+  server: ReturnType<typeof createUprateServer>;
   transport: StreamableHTTPServerTransport;
-  apiClient: ApiClient;
   token: string;
   lastActivity: number;
 }
 
 const MAX_SESSIONS = 1000;
-const MAX_BODY_BYTES = 4 * 1024 * 1024; // 4 MB
-const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
-function registerAllTools(server: McpServer, api: ApiClient): void {
-  registerAppTools(server, api);
-  registerReviewTools(server, api);
-  registerTopicTools(server, api);
-  registerAnalyticsTools(server, api);
-  registerWorkflowTools(server, api);
-}
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 function extractBearerToken(req: IncomingMessage): string | null {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  return authHeader.slice(7);
+  return req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : null;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -52,11 +31,7 @@ function readBody(req: IncomingMessage): Promise<string> {
     let size = 0;
     req.on("data", (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
-        req.destroy();
-        reject(new Error("Request body too large"));
-        return;
-      }
+      if (size > MAX_BODY_BYTES) { reject(new Error("Request body too large")); req.destroy(); return; }
       chunks.push(chunk);
     });
     req.on("end", () => resolve(Buffer.concat(chunks).toString()));
@@ -69,190 +44,112 @@ function sendResponse(res: ServerResponse, status: number, headers: Record<strin
   res.end(body);
 }
 
-function sendJson(res: ServerResponse, status: number, data: unknown): void {
-  sendResponse(res, status, { "Content-Type": "application/json" }, JSON.stringify(data));
+function sendJson(res: ServerResponse, status: number, data: unknown, headers: Record<string, string> = {}): void {
+  sendResponse(res, status, { "Content-Type": "application/json", ...headers }, JSON.stringify(data));
 }
 
-export function startHttpServer(config: OAuthConfig & { port: number }): void {
-  const sessions = new Map<string, Session>();
+function sendUnauthorized(res: ServerResponse, config: OAuthConfig, message = "Unauthorized"): void {
+  sendJson(res, 401, { error: message }, {
+    "WWW-Authenticate": `Bearer resource_metadata="${config.mcpBaseUrl}/.well-known/oauth-protected-resource/mcp"`,
+  });
+}
 
-  // Cleanup idle sessions
-  const cleanupInterval = setInterval(() => {
+export function createHttpServer(rawConfig: OAuthConfig): Server {
+  const config = normalizeOAuthConfig(rawConfig);
+  const sessions = new Map<string, Session>();
+  const cleanup = setInterval(() => {
     const now = Date.now();
-    for (const [sessionId, session] of sessions) {
+    for (const [id, session] of sessions) {
       if (now - session.lastActivity > SESSION_IDLE_TIMEOUT_MS) {
         session.transport.close().catch(() => {});
-        sessions.delete(sessionId);
-        console.error(`Session ${sessionId} expired (idle timeout)`);
+        sessions.delete(id);
       }
     }
   }, CLEANUP_INTERVAL_MS);
-  cleanupInterval.unref();
+  cleanup.unref();
 
-  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-    const pathname = url.pathname;
     const method = req.method ?? "GET";
-
     try {
-      // OAuth routes
-      if (method === "GET" && pathname === "/.well-known/oauth-authorization-server") {
-        const result = handleMetadata(config);
-        sendResponse(res, result.status, result.headers, result.body);
-        return;
+      if (method === "GET" && url.pathname === "/.well-known/oauth-authorization-server") {
+        const result = handleMetadata(config); sendResponse(res, result.status, result.headers, result.body); return;
       }
-
-      if (method === "GET" && pathname === "/oauth/authorize") {
-        const result = handleAuthorize(url.searchParams, config);
-        sendResponse(res, result.status, result.headers, result.body);
-        return;
+      if (method === "GET" && ["/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"].includes(url.pathname)) {
+        const result = handleProtectedResourceMetadata(config); sendResponse(res, result.status, result.headers, result.body); return;
       }
-
-      if (method === "GET" && pathname === "/oauth/callback") {
-        const result = handleCallback(url.searchParams, config);
-        sendResponse(res, result.status, result.headers, result.body);
-        return;
+      if (method === "GET" && url.pathname === "/oauth/authorize") {
+        const result = handleAuthorize(url.searchParams, config); sendResponse(res, result.status, result.headers, result.body); return;
       }
-
-      if (method === "POST" && pathname === "/oauth/register") {
-        const body = await readBody(req);
-        const result = handleRegistration(body);
-        sendResponse(res, result.status, result.headers, result.body);
-        return;
+      if (method === "GET" && url.pathname === "/oauth/callback") {
+        const result = handleCallback(url.searchParams, config); sendResponse(res, result.status, result.headers, result.body); return;
       }
-
-      if (method === "POST" && pathname === "/oauth/token") {
-        const body = await readBody(req);
-        const result = await handleTokenExchange(body, config);
-        sendResponse(res, result.status, result.headers, result.body);
-        return;
+      if (method === "POST" && url.pathname === "/oauth/register") {
+        const result = handleRegistration(await readBody(req)); sendResponse(res, result.status, result.headers, result.body); return;
       }
-
-      // MCP routes
-      if (pathname === "/mcp") {
-        await handleMcpRequest(req, res, sessions, config);
-        return;
+      if (method === "POST" && url.pathname === "/oauth/token") {
+        const result = await handleTokenExchange(await readBody(req), config); sendResponse(res, result.status, result.headers, result.body); return;
       }
-
-      // 404 for everything else
+      if (url.pathname === "/mcp") { await handleMcpRequest(req, res, sessions, config); return; }
       sendJson(res, 404, { error: "Not found" });
     } catch (error) {
       console.error("Unhandled error:", error);
       sendJson(res, 500, { error: "Internal server error" });
     }
   });
-
-  server.listen(config.port, () => {
-    console.error(`Uprate MCP server running on http://0.0.0.0:${config.port}`);
-  });
+  server.on("close", () => clearInterval(cleanup));
+  return server;
 }
 
-async function handleMcpRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  sessions: Map<string, Session>,
-  config: OAuthConfig
-): Promise<void> {
+export function startHttpServer(config: OAuthConfig & { port: number }): Server {
+  const server = createHttpServer(config);
+  server.listen(config.port, () => console.error(`Uprate MCP server running on http://0.0.0.0:${config.port}`));
+  return server;
+}
+
+async function handleMcpRequest(req: IncomingMessage, res: ServerResponse, sessions: Map<string, Session>, config: OAuthConfig): Promise<void> {
   const method = req.method ?? "GET";
-
-  // Bearer token required for all /mcp requests
   const token = extractBearerToken(req);
-  if (!token) {
-    sendJson(res, 401, { error: "Unauthorized" });
-    return;
-  }
+  if (!token) { sendUnauthorized(res, config); return; }
 
-  const rawSessionId = req.headers["mcp-session-id"];
-  const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
-
-  // Existing session — look up and delegate
+  const rawId = req.headers["mcp-session-id"];
+  const sessionId = Array.isArray(rawId) ? rawId[0] : rawId;
   if (sessionId) {
     const session = sessions.get(sessionId);
-    if (!session) {
-      sendJson(res, 404, { jsonrpc: "2.0", error: { code: -32000, message: "Session not found." }, id: null });
-      return;
-    }
-
-    // Token mismatch check
-    if (session.token !== token) {
-      sendJson(res, 401, { error: "Token mismatch. Start a new session after re-authorization." });
-      return;
-    }
-
+    if (!session) { sendJson(res, 404, { jsonrpc: "2.0", error: { code: -32000, message: "Session not found." }, id: null }); return; }
+    if (session.token !== token) { sendUnauthorized(res, config, "Token mismatch. Start a new session after re-authorization."); return; }
     session.lastActivity = Date.now();
-
     if (method === "POST") {
-      const body = await readBody(req);
-      let parsedBody: unknown;
-      try {
-        parsedBody = JSON.parse(body);
-      } catch {
-        sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null });
-        return;
-      }
-      await session.transport.handleRequest(req, res, parsedBody);
+      let body: unknown;
+      try { body = JSON.parse(await readBody(req)); }
+      catch { sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }); return; }
+      await session.transport.handleRequest(req, res, body);
     } else if (method === "GET" || method === "DELETE") {
       await session.transport.handleRequest(req, res);
-    } else {
-      sendJson(res, 405, { error: "Method not allowed" });
-    }
+    } else sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
 
-  // New session — only on POST with initialization request
   if (method === "POST") {
-    if (sessions.size >= MAX_SESSIONS) {
-      sendJson(res, 503, { error: "Too many active sessions. Try again later." });
-      return;
+    if (sessions.size >= MAX_SESSIONS) { sendJson(res, 503, { error: "Too many active sessions. Try again later." }); return; }
+    let body: unknown;
+    try { body = JSON.parse(await readBody(req)); }
+    catch { sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }); return; }
+    if (!isInitializeRequest(body)) {
+      sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32000, message: "Bad Request: No valid session ID and not an initialization request." }, id: null }); return;
     }
 
-    const body = await readBody(req);
-    let parsedBody: unknown;
-    try {
-      parsedBody = JSON.parse(body);
-    } catch {
-      sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null });
-      return;
-    }
-
-    if (!isInitializeRequest(parsedBody)) {
-      sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32000, message: "Bad Request: No valid session ID and not an initialization request." }, id: null });
-      return;
-    }
-
-    const apiClient = new ApiClient(token, config.uprateBaseUrl);
-    const mcpServer = new McpServer({
-      name: "uprate-mcp-server",
-      version: "1.0.0",
-    });
-    registerAllTools(mcpServer, apiClient);
-
-    const transport = new StreamableHTTPServerTransport({
+    const mcpServer = createUprateServer(new ApiClient(token, config.uprateBaseUrl));
+    const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (newSessionId: string) => {
-        sessions.set(newSessionId, {
-          server: mcpServer,
-          transport,
-          apiClient,
-          token,
-          lastActivity: Date.now(),
-        });
-        console.error(`Session created: ${newSessionId}`);
+      onsessioninitialized: (id): void => {
+        sessions.set(id, { server: mcpServer, transport, token, lastActivity: Date.now() });
       },
     });
-
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        sessions.delete(transport.sessionId);
-        console.error(`Session closed: ${transport.sessionId}`);
-      }
-    };
-
+    transport.onclose = () => { if (transport.sessionId) sessions.delete(transport.sessionId); };
     await mcpServer.connect(transport);
-    await transport.handleRequest(req, res, parsedBody);
+    await transport.handleRequest(req, res, body);
     return;
   }
-
-  // GET or DELETE without session ID
   sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32000, message: "Bad Request: Missing session ID." }, id: null });
 }
