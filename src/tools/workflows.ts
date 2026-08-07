@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ApiClient, handleToolError } from "../api.js";
+import { ApiClient, handleToolError, jsonToolResult } from "../api.js";
 
 export function registerWorkflowTools(
   server: McpServer,
@@ -18,7 +18,7 @@ export function registerWorkflowTools(
     {
       title: "Get App Overview",
       description:
-        "Get a comprehensive overview of an app by combining app details, analytics summary, and platform breakdown in a single call. Returns { app, analytics, platforms }.",
+        "Get a comprehensive overview of an app by combining app details, analytics summary, and platform breakdown. Makes three Uprate API requests per MCP call. Returns { app, analytics, platforms }.",
       inputSchema: {
         app_uuid: z.string().uuid().describe("The app UUID"),
       },
@@ -32,9 +32,7 @@ export function registerWorkflowTools(
           api.get("/analytics/platforms", { appUuid: app_uuid }),
         ]);
         const result = { app, analytics, platforms };
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
+        return jsonToolResult(result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -46,7 +44,7 @@ export function registerWorkflowTools(
     {
       title: "Get Negative Reviews Needing Attention",
       description:
-        "Get unresolved negative reviews alongside top topics for context. Helps prioritize which reviews to respond to. Returns { reviews, topics }.",
+        "Get unresolved negative reviews alongside top topics for context. Makes two Uprate API requests per MCP call. Returns { reviews, topics }.",
       inputSchema: {
         app_uuid: z.string().uuid().describe("The app UUID"),
         page: z
@@ -84,9 +82,7 @@ export function registerWorkflowTools(
           }),
         ]);
         const result = { reviews, topics };
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
+        return jsonToolResult(result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -98,7 +94,7 @@ export function registerWorkflowTools(
     {
       title: "Get App Health Report",
       description:
-        "Get a consolidated health report combining analytics summary, response time trends with aging buckets, and geographic distribution. Useful for periodic check-ins. Returns { analytics, response_times, territories }.",
+        "Get a consolidated health report combining analytics summary, response time trends, and geographic distribution. Makes three Uprate API requests per MCP call. Returns { analytics, response_times, territories }.",
       inputSchema: {
         app_uuid: z.string().uuid().describe("The app UUID"),
       },
@@ -112,9 +108,32 @@ export function registerWorkflowTools(
           api.get("/analytics/territories", { appUuid: app_uuid }),
         ]);
         const result = { analytics, response_times, territories };
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
+        return jsonToolResult(result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_review_reply_context",
+    {
+      title: "Get Review Reply Context",
+      description:
+        "Get a review and the app's Review Soul together before drafting a reply. Makes two Uprate API requests per MCP call. Returns { review, soul }.",
+      inputSchema: {
+        app_uuid: z.string().uuid().describe("The app UUID"),
+        review_uuid: z.string().uuid().describe("The review UUID"),
+      },
+      annotations: readOnlyAnnotations,
+    },
+    async ({ app_uuid, review_uuid }) => {
+      try {
+        const [review, soul] = await Promise.all([
+          api.get(`/reviews/${review_uuid}`, { appUuid: app_uuid }),
+          api.get(`/apps/${app_uuid}/soul`),
+        ]);
+        return jsonToolResult({ review, soul });
       } catch (error) {
         return handleToolError(error);
       }

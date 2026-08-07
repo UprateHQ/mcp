@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ApiClient, handleToolError } from "../api.js";
+import { ApiClient, handleToolError, jsonToolResult } from "../api.js";
 
 export function registerAnalyticsTools(
   server: McpServer,
@@ -31,9 +31,7 @@ export function registerAnalyticsTools(
         const data = await api.get("/analytics/summary", {
           appUuid: app_uuid,
         });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-        };
+        return jsonToolResult(data);
       } catch (error) {
         return handleToolError(error);
       }
@@ -54,9 +52,7 @@ export function registerAnalyticsTools(
         const data = await api.get("/analytics/platforms", {
           appUuid: app_uuid,
         });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-        };
+        return jsonToolResult(data);
       } catch (error) {
         return handleToolError(error);
       }
@@ -77,9 +73,7 @@ export function registerAnalyticsTools(
         const data = await api.get("/analytics/response-times", {
           appUuid: app_uuid,
         });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-        };
+        return jsonToolResult(data);
       } catch (error) {
         return handleToolError(error);
       }
@@ -100,9 +94,7 @@ export function registerAnalyticsTools(
         const data = await api.get("/analytics/territories", {
           appUuid: app_uuid,
         });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-        };
+        return jsonToolResult(data);
       } catch (error) {
         return handleToolError(error);
       }

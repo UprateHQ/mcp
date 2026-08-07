@@ -1,14 +1,9 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ApiClient } from "./api.js";
-import { registerAppTools } from "./tools/apps.js";
-import { registerReviewTools } from "./tools/reviews.js";
-import { registerTopicTools } from "./tools/topics.js";
-import { registerAnalyticsTools } from "./tools/analytics.js";
-import { registerWorkflowTools } from "./tools/workflows.js";
 import { startHttpServer } from "./http-server.js";
+import { createUprateServer } from "./server.js";
 
 const transport = process.env.TRANSPORT ?? "stdio";
 if (transport !== "stdio" && transport !== "http") {
@@ -55,16 +50,7 @@ if (transport === "http") {
 
   const api = new ApiClient(token, baseUrl);
 
-  const server = new McpServer({
-    name: "uprate-mcp-server",
-    version: "1.0.0",
-  });
-
-  registerAppTools(server, api);
-  registerReviewTools(server, api);
-  registerTopicTools(server, api);
-  registerAnalyticsTools(server, api);
-  registerWorkflowTools(server, api);
+  const server = createUprateServer(api);
 
   const stdioTransport = new StdioServerTransport();
   server.connect(stdioTransport).then(() => {

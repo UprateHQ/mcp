@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ApiClient, handleToolError } from "../api.js";
+import { ApiClient, handleToolError, jsonToolResult } from "../api.js";
 
 export function registerTopicTools(server: McpServer, api: ApiClient): void {
   server.registerTool(
@@ -38,9 +38,7 @@ export function registerTopicTools(server: McpServer, api: ApiClient): void {
           appUuid: app_uuid,
           query: { page, per_page },
         });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-        };
+        return jsonToolResult(data);
       } catch (error) {
         return handleToolError(error);
       }
@@ -83,9 +81,7 @@ export function registerTopicTools(server: McpServer, api: ApiClient): void {
           appUuid: app_uuid,
           query: { page, per_page },
         });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-        };
+        return jsonToolResult(data);
       } catch (error) {
         return handleToolError(error);
       }
