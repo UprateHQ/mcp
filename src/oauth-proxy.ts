@@ -49,7 +49,6 @@ const BUILT_IN_REDIRECT_URIS = new Set([
   "https://claude.com/api/mcp/auth_callback",
   "https://www.cursor.com/agents/mcp/oauth/callback",
   "cursor://anysphere.cursor-mcp/oauth/callback",
-  "cursor://anysphere.cursor-deeplink/mcp/oauth/callback",
 ]);
 
 interface RegisteredClientPayload {

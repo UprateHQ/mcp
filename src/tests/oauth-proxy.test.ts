@@ -107,6 +107,7 @@ test("registration fails closed for redirect URI scheme, host, userinfo, and pat
     "http://127.1/oauth/callback",
     "http://127.0.0.1.attacker.example/oauth/callback",
     "http://localhost.attacker.example/oauth/callback",
+    "cursor://anysphere.cursor-deeplink/mcp/oauth/callback",
   ];
 
   for (const candidate of rejected) {
