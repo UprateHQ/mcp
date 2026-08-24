@@ -463,7 +463,6 @@ export async function handleTokenExchange(requestBody: string, rawConfig: OAuthC
         code: proxyCode.u,
         code_verifier: codeVerifier,
       }),
-      signal: AbortSignal.timeout(10_000),
     });
     return { status: upstream.status, headers: noStoreJsonHeaders, body: await upstream.text() };
   } catch {

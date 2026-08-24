@@ -27,12 +27,13 @@ test("API client normalizes URLs, headers, and array query parameters", async ()
   assert.equal(headers.get("Accept"), "application/json");
   assert.equal(headers.get("Content-Type"), "application/json");
   assert.equal(headers.get("Uprate-App-Id"), "app-id");
+  assert.ok(request.init?.signal instanceof AbortSignal);
 });
 
-test("API client supports every method, serializes write bodies, and returns null for 204", async () => {
-  const calls: Array<{ method?: string; body?: unknown }> = [];
+test("API client times out reads but never aborts an unknown-outcome write", async () => {
+  const calls: Array<{ method?: string; body?: unknown; signal?: AbortSignal | null }> = [];
   globalThis.fetch = async (_input, init) => {
-    calls.push({ method: init?.method, body: init?.body });
+    calls.push({ method: init?.method, body: init?.body, signal: init?.signal });
     return init?.method === "DELETE"
       ? new Response(null, { status: 204 })
       : new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -45,6 +46,8 @@ test("API client supports every method, serializes write bodies, and returns nul
   assert.equal(await api.delete("/five"), null);
   assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "PATCH", "PUT", "DELETE"]);
   assert.deepEqual(calls.map((call) => call.body ?? null), [null, '{"value":2}', '{"value":3}', '{"value":4}', null]);
+  assert.ok(calls[0].signal instanceof AbortSignal);
+  assert.deepEqual(calls.slice(1).map((call) => call.signal), [undefined, undefined, undefined, undefined]);
 });
 
 test("API errors retain Laravel validation details and distinct conflict codes", async () => {

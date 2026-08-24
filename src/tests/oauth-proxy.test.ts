@@ -257,11 +257,16 @@ test("token exchange enforces exact client, redirect, code, and PKCE binding bef
   const proxyCode = issueProxyCode(clientId);
   const otherRedirect = "http://localhost:6274/oauth/callback/debug";
   const otherClientId = registerClient([otherRedirect]);
-  const upstreamRequests: Array<{ url: string; body: Record<string, string> }> = [];
+  const upstreamRequests: Array<{
+    url: string;
+    body: Record<string, string>;
+    signal: AbortSignal | null | undefined;
+  }> = [];
   globalThis.fetch = async (input, init) => {
     upstreamRequests.push({
       url: String(input),
       body: JSON.parse(String(init?.body)) as Record<string, string>,
+      signal: init?.signal,
     });
     return new Response(JSON.stringify({ access_token: "token" }), { status: 200 });
   };
@@ -278,16 +283,15 @@ test("token exchange enforces exact client, redirect, code, and PKCE binding bef
   );
   assert.equal(valid.status, 200);
   assert.equal(upstreamRequests.length, 1);
-  assert.deepEqual(upstreamRequests[0], {
-    url: "https://app.example/api/oauth/token",
-    body: {
-      grant_type: "authorization_code",
-      client_id: "uprate-mcp-server",
-      redirect_uri: "https://mcp.example/oauth/callback",
-      code: "upstream-code",
-      code_verifier: verifier,
-    },
+  assert.equal(upstreamRequests[0].url, "https://app.example/api/oauth/token");
+  assert.deepEqual(upstreamRequests[0].body, {
+    grant_type: "authorization_code",
+    client_id: "uprate-mcp-server",
+    redirect_uri: "https://mcp.example/oauth/callback",
+    code: "upstream-code",
+    code_verifier: verifier,
   });
+  assert.equal(upstreamRequests[0].signal, undefined);
 
   const rejectedBodies = [
     {

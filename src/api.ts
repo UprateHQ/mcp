@@ -83,8 +83,10 @@ export class ApiClient {
     const fetchOptions: RequestInit = {
       method,
       headers: this.buildHeaders(options.appUuid),
-      signal: AbortSignal.timeout(10_000),
     };
+    // A timed-out mutation may still finish upstream. Only abort safe reads so
+    // callers never receive a retryable-looking failure for an unknown write.
+    if (method === "GET") fetchOptions.signal = AbortSignal.timeout(10_000);
     if (options.body && ["POST", "PATCH", "PUT"].includes(method)) {
       fetchOptions.body = JSON.stringify(options.body);
     }
