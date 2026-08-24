@@ -85,7 +85,7 @@ export function createHttpServer(rawConfig: OAuthConfig): Server {
         const result = handleCallback(url.searchParams, config); sendResponse(res, result.status, result.headers, result.body); return;
       }
       if (method === "POST" && url.pathname === "/oauth/register") {
-        const result = handleRegistration(await readBody(req)); sendResponse(res, result.status, result.headers, result.body); return;
+        const result = handleRegistration(await readBody(req), config); sendResponse(res, result.status, result.headers, result.body); return;
       }
       if (method === "POST" && url.pathname === "/oauth/token") {
         const result = await handleTokenExchange(await readBody(req), config); sendResponse(res, result.status, result.headers, result.body); return;

@@ -36,6 +36,11 @@ if (transport === "http") {
     mcpBaseUrl,
     uprateBaseUrl: baseUrl,
     oauthStateSecret,
+    allowedRedirectUris: (process.env.OAUTH_ALLOWED_REDIRECT_URIS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value !== ""),
+    upstreamClientId: process.env.OAUTH_UPSTREAM_CLIENT_ID ?? "uprate-mcp-server",
     port,
   });
 } else {
