@@ -83,6 +83,7 @@ export class ApiClient {
     const fetchOptions: RequestInit = {
       method,
       headers: this.buildHeaders(options.appUuid),
+      signal: AbortSignal.timeout(10_000),
     };
     if (options.body && ["POST", "PATCH", "PUT"].includes(method)) {
       fetchOptions.body = JSON.stringify(options.body);
