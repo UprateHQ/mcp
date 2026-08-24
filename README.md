@@ -142,7 +142,7 @@ Hosted HTTP mode:
 |---|---|---|---|
 | `TRANSPORT` | Yes | — | Set to `http` |
 | `MCP_BASE_URL` | Yes | — | Public MCP server origin |
-| `OAUTH_STATE_SECRET` | Yes | — | Stable random secret of at least 32 bytes, used to sign OAuth clients, state, and authorization codes |
+| `OAUTH_STATE_SECRET` | Yes | — | Stable random secret of at least 32 bytes, unique to this deployment environment, used to sign OAuth clients, state, and authorization codes |
 | `OAUTH_ALLOWED_REDIRECT_URIS` | No | Built-in Claude and Cursor callbacks | Comma-separated additional exact callback URIs; wildcards are rejected |
 | `OAUTH_UPSTREAM_CLIENT_ID` | No | `uprate-mcp-server` | Client ID registered by the Uprate backend for this proxy |
 | `PORT` | No | `3000` | HTTP listen port |
@@ -159,6 +159,7 @@ Local stdio mode:
 
 - OAuth login loops or stale credentials: log out of the MCP server in the client, then run the client's login flow again (`codex mcp login uprate` for Codex).
 - Changing `OAUTH_STATE_SECRET` invalidates dynamically registered clients and in-flight authorization. Keep it stable; after an intentional rotation, re-register and reauthorize clients.
+- Never reuse `OAUTH_STATE_SECRET` between development and production. Signed client, state, and code payloads do not cross an environment boundary safely when both environments share the signing key.
 - Authentication fails after previously working: the OAuth credential or personal token may have expired or been revoked. Reauthorize or create a new API token.
 - An app is missing: call `list_apps` and use the returned `app_uuid`. The credential may not have access to that app.
 - A review or Soul request reports not found or forbidden: verify the app scope, object UUID, and account ownership. Review calls must use the owning app's `app_uuid`.
