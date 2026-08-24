@@ -142,7 +142,7 @@ Hosted HTTP mode:
 |---|---|---|---|
 | `TRANSPORT` | Yes | — | Set to `http` |
 | `MCP_BASE_URL` | Yes | — | Public MCP server origin |
-| `OAUTH_STATE_SECRET` | Yes | — | Stable secret used to sign OAuth clients, state, and authorization codes |
+| `OAUTH_STATE_SECRET` | Yes | — | Stable random secret of at least 32 bytes, used to sign OAuth clients, state, and authorization codes |
 | `OAUTH_ALLOWED_REDIRECT_URIS` | No | Built-in Claude and Cursor callbacks | Comma-separated additional exact callback URIs; wildcards are rejected |
 | `OAUTH_UPSTREAM_CLIENT_ID` | No | `uprate-mcp-server` | Client ID registered by the Uprate backend for this proxy |
 | `PORT` | No | `3000` | HTTP listen port |

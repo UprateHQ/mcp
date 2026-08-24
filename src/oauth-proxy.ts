@@ -21,6 +21,10 @@ export interface HttpResponse {
 }
 
 export function normalizeOAuthConfig(config: OAuthConfig): OAuthConfig {
+  if (Buffer.byteLength(config.oauthStateSecret, "utf8") < 32) {
+    throw new Error("OAUTH_STATE_SECRET must contain at least 32 bytes.");
+  }
+
   const allowedRedirectUris = config.allowedRedirectUris ?? [];
   for (const redirectUri of allowedRedirectUris) {
     if (!isCanonicalRedirectUri(redirectUri) || redirectUri.includes("*")) {

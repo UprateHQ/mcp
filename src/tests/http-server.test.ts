@@ -8,7 +8,7 @@ import { createHttpServer } from "../http-server.js";
 const server = createHttpServer({
   mcpBaseUrl: "https://mcp.example/",
   uprateBaseUrl: "https://app.example/",
-  oauthStateSecret: "secret",
+  oauthStateSecret: "0123456789abcdef0123456789abcdef",
 });
 let origin = "";
 

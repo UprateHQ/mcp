@@ -15,7 +15,7 @@ import { hashBinding, signPayload, unwrapState } from "../state.js";
 const config: OAuthConfig = {
   mcpBaseUrl: "https://mcp.example///",
   uprateBaseUrl: "https://app.example///",
-  oauthStateSecret: "state-secret",
+  oauthStateSecret: "0123456789abcdef0123456789abcdef",
 };
 const redirectUri = "http://127.0.0.1:6274/oauth/callback";
 const verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
@@ -162,6 +162,10 @@ test("registration rejects malformed metadata and wildcard allowlist entries", (
     () => handleMetadata({ ...config, allowedRedirectUris: ["https://*.example/callback"] }),
     /Invalid OAuth redirect URI allowlist entry/,
   );
+  assert.throws(
+    () => handleMetadata({ ...config, oauthStateSecret: "guessable" }),
+    /at least 32 bytes/,
+  );
 });
 
 test("authorization enforces response type, S256 syntax, and bounded state", () => {
@@ -222,7 +226,7 @@ test("authorization forwards a fixed upstream client while binding state to the 
   assert.equal(upstream.searchParams.get("code_challenge"), challenge);
   const state = unwrapState(
     upstream.searchParams.get("state")!,
-    "state-secret",
+    config.oauthStateSecret,
   );
   assert.equal(state?.s, "original");
   assert.equal(state?.r, redirectUri);
