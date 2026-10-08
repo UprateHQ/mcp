@@ -1,5 +1,7 @@
 # Uprate MCP Server
 
+> **Deprecated.** This server is no longer maintained and `mcp.upratehq.com` has been shut down. Uprate has a built-in MCP server at `https://app.upratehq.com/mcp/product`. Open **Settings > MCP** in [Uprate](https://app.upratehq.com/settings/mcp) for setup steps.
+
 Connect your [UprateHQ](https://upratehq.com) app reviews to AI assistants like Claude, Cursor, and any MCP-compatible client.
 
 Browse reviews, reply to users, analyze sentiment, and track topics — all through natural language.
